@@ -1,0 +1,13 @@
+# Web Scraper to DOCX - Python Dependencies
+# Python 3.10+ required (tested on 3.13.3)
+
+# Browser automation
+playwright==1.44.0
+
+# HTML parsing
+beautifulsoup4==4.12.3
+lxml==5.2.2
+
+# DOCX generation
+python-docx==1.1.2
+

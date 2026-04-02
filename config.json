@@ -1,0 +1,32 @@
+{
+  "_comment": "Scraper configuration. Add/remove keywords freely without changing code.",
+
+  "start_markers": [
+    "varavaramunayE nama:"
+  ],
+
+  "stop_markers": [
+    "ramanuja dasan",
+    "rAmAnuja dhAsan",
+    "rAmAnuja dAsan"
+  ],
+
+  "remove_text": [
+    "Full Series",
+    "Previous",
+    "SrI: SrImathE SatakOpAya nama: SrImathE rAmAnujAya nama: SrImath varavaramunayE nama:"
+  ],
+
+  "toc_selector": "li > a[href]",
+
+  "max_chapters": 150,
+
+  "reading_mode": true,
+
+  "include_images": true,
+
+  "browser": {
+    "headless": false,
+    "timeout_ms": 30000
+  }
+}
