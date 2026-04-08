@@ -1048,7 +1048,7 @@ def _replace_placeholders(doc: Document, title: str, base_url: str) -> None:
     Searches in headers, main content, footers, and all runs."""
     
     def replace_placeholder_in_paragraph(para, placeholder, replacement):
-        """Replace placeholder in all runs of a paragraph."""
+        """Replace placeholder in all runs of a paragraph, preserving paragraph style."""
         # Collect all text from all runs
         full_text = para.text
         if placeholder in full_text:
@@ -1065,6 +1065,9 @@ def _replace_placeholders(doc: Document, title: str, base_url: str) -> None:
                 font_size = first_run.font.size
                 font_color = first_run.font.color.rgb
             
+            # Save paragraph style (important for list bullets, etc.)
+            para_style = para.style
+            
             # Clear all existing runs in the paragraph
             for run in para.runs[:]:  # Iterate over a copy
                 r = run._element
@@ -1078,6 +1081,9 @@ def _replace_placeholders(doc: Document, title: str, base_url: str) -> None:
                 new_run.font.size = font_size
             if font_color:
                 new_run.font.color.rgb = font_color
+            
+            # Restore paragraph style (this preserves bullet formatting, etc.)
+            para.style = para_style
     
     # Replace XXX1 and HHH1 with title in header
     for section in doc.sections:
