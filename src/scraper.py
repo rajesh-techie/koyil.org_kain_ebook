@@ -1256,14 +1256,14 @@ def build_docx(
     # Pages 3+ — One section per chapter, each heading carries a bookmark
     # -------------------------------------------------------------------
     for i, ch_data in enumerate(chapter_contents):
-        title = ch_data["title"]
+        ch_title = ch_data["title"]
         lines = ch_data["lines"]
         bm_name = bookmark_names[i]
         bm_id   = i + 1  # IDs start at 1
 
         # Use Heading 1 for chapters (same level as Introduction) so TOC alignment is consistent
         # Add sequence number to chapter title for TOC numbering
-        numbered_title = f"{i + 1}. {title}"
+        numbered_title = f"{i + 1}. {ch_title}"
         hdg = doc.add_heading(numbered_title, level=1)
         # Make heading blue
         for run in hdg.runs:
