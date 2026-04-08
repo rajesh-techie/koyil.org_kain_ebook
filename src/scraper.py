@@ -1044,16 +1044,24 @@ def build_docx(
                  ...
     
     If language and cfg provided, loads template first and copies its content.
+    Gracefully falls back to blank document if template is missing or invalid.
     """
-    # Load template if language is provided
+    # Try to load template if language is provided
+    doc = None
     if language and cfg:
         template_path = _load_template_path(language, cfg)
-        if template_path:
-            doc = Document(template_path)
-            log.info("Starting with template for language: %s", language)
-        else:
-            doc = Document()
-    else:
+        if template_path and Path(template_path).exists():
+            try:
+                doc = Document(template_path)
+                log.info("Starting with template for language: %s", language)
+            except Exception as e:
+                log.warning("Failed to load template %s: %s. Using blank document.", template_path, e)
+                doc = None
+        elif template_path:
+            log.warning("Template file not found: %s. Using blank document.", template_path)
+    
+    # Create blank document if template loading failed or wasn't requested
+    if doc is None:
         doc = Document()
 
     # Add header and footer FIRST (before adding content)
