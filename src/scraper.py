@@ -871,6 +871,50 @@ try {{
         log.info("  Tip: Open document and press Ctrl+A, then F9 to update TOC page numbers")
 
 
+def _get_available_style(doc: Document, requested_style: str) -> str:
+    """
+    Get an available style from the document, with fallback mappings for common list styles.
+    If the requested style doesn't exist, tries to find a suitable alternative.
+    """
+    try:
+        # Check if style exists by trying to access it
+        _ = doc.styles[requested_style]
+        return requested_style
+    except KeyError:
+        pass
+    
+    # Map unavailable list styles to standard alternatives
+    style_mappings = {
+        "List Bullet": "List Bullet",  # Try the base version first
+        "List Number": "List Number",
+        "List Bullet 2": "List Bullet",
+        "List Bullet 3": "List Bullet",
+    }
+    
+    # Check if requested style is a list style that we should map
+    if requested_style in style_mappings:
+        mapped_style = style_mappings[requested_style]
+        try:
+            _ = doc.styles[mapped_style]
+            log.debug("Mapped style '%s' to '%s'", requested_style, mapped_style)
+            return mapped_style
+        except KeyError:
+            pass
+    
+    # Try standard list styles
+    for fallback in ["List Bullet", "List Paragraph", "Normal"]:
+        try:
+            _ = doc.styles[fallback]
+            log.debug("Falling back from '%s' to '%s'", requested_style, fallback)
+            return fallback
+        except KeyError:
+            continue
+    
+    # Last resort: use Normal
+    log.debug("No suitable style found for '%s'; using 'Normal'", requested_style)
+    return "Normal"
+
+
 def _write_lines(doc: Document, items: list[dict]):
     """Write structured items as DOCX paragraphs, preserving formatting (bold/italic).
     Handles both text items and image items."""
@@ -896,16 +940,13 @@ def _write_lines(doc: Document, items: list[dict]):
         
         # Handle text items
         runs = item.get("runs", [])
-        style = item.get("style", "Normal")
+        requested_style = item.get("style", "Normal")
         if not runs:
             continue
         
-        # Try to use requested style; fall back to Normal if style doesn't exist
-        try:
-            p = doc.add_paragraph(style=style)
-        except KeyError:
-            log.debug("Style '%s' not found in document; using 'Normal' instead", style)
-            p = doc.add_paragraph(style="Normal")
+        # Get available style with fallback mappings
+        style = _get_available_style(doc, requested_style)
+        p = doc.add_paragraph(style=style)
         for i, run_data in enumerate(runs):
             text = run_data.get("text", "")
             bold = run_data.get("bold", False)
