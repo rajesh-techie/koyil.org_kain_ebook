@@ -984,7 +984,19 @@ def _write_lines(doc: Document, items: list[dict]):
         
         # Get available style with fallback mappings
         style = _get_available_style(doc, requested_style)
+        
+        # Detect if we need to manually add bullet — happens when the requested
+        # style is a bullet list but the template doesn't have that style.
+        is_bullet_style = requested_style.startswith("List Bullet")
+        style_fell_back = is_bullet_style and not style.startswith("List Bullet")
+        
         p = doc.add_paragraph(style=style)
+        
+        # If style fell back from bullet to Normal, add indent + bullet char manually
+        if style_fell_back:
+            p.paragraph_format.left_indent = Inches(0.25)
+        
+        first_run_in_para = True
         for i, run_data in enumerate(runs):
             text = run_data.get("text", "")
             bold = run_data.get("bold", False)
@@ -993,6 +1005,11 @@ def _write_lines(doc: Document, items: list[dict]):
                 # Add space between runs if needed (unless at start or after space)
                 if i > 0 and not text.startswith(" ") and not runs[i-1].get("text", "").endswith(" "):
                     p.add_run(" ")
+                
+                # Prefix first run with bullet character if style fell back
+                if style_fell_back and first_run_in_para:
+                    text = "• " + text
+                    first_run_in_para = False
                 
                 # Detect URLs in text and format them in blue
                 last_end = 0
@@ -1076,32 +1093,62 @@ def _copy_template_content(doc: Document, template_path: str) -> None:
 
 def _replace_placeholders(doc: Document, title: str, base_url: str) -> None:
     """Replace placeholders in document: XXX1, HHH1, FFF1 with appropriate values.
-    Directly modifies text nodes to preserve paragraph formatting (bullets, etc.)."""
+    Searches in headers, main content, footers, and all runs."""
     
-    def replace_in_paragraph_runs(para, placeholder, replacement):
-        """Replace placeholder text directly in runs without clearing them."""
-        for run in para.runs:
-            if placeholder in run.text:
-                # Directly modify the text element in XML to preserve structure
-                t_element = run._element.find(qn('w:t'))
-                if t_element is not None and t_element.text:
-                    t_element.text = t_element.text.replace(placeholder, replacement)
+    def replace_placeholder_in_paragraph(para, placeholder, replacement):
+        """Replace placeholder in all runs of a paragraph, preserving paragraph style."""
+        # Collect all text from all runs
+        full_text = para.text
+        if placeholder in full_text:
+            # Replace placeholder in full text
+            new_text = full_text.replace(placeholder, replacement)
+            
+            # Save formatting from first run (if available)
+            font_name = None
+            font_size = None
+            font_color = None
+            if para.runs:
+                first_run = para.runs[0]
+                font_name = first_run.font.name
+                font_size = first_run.font.size
+                font_color = first_run.font.color.rgb
+            
+            # Save paragraph style (important for list bullets, etc.)
+            para_style = para.style
+            
+            # Clear all existing runs in the paragraph
+            for run in para.runs[:]:  # Iterate over a copy
+                r = run._element
+                r.getparent().remove(r)
+            
+            # Add new run with replaced text (preserving original formatting if possible)
+            new_run = para.add_run(new_text)
+            if font_name:
+                new_run.font.name = font_name
+            if font_size:
+                new_run.font.size = font_size
+            if font_color:
+                new_run.font.color.rgb = font_color
+            
+            # Restore paragraph style (this preserves bullet formatting, etc.)
+            para.style = para_style
     
     # Replace XXX1 and HHH1 with title in header
     for section in doc.sections:
         header = section.header
         for para in header.paragraphs:
+            # Replace both XXX1 and HHH1
             if "XXX1" in para.text:
-                replace_in_paragraph_runs(para, "XXX1", title)
+                replace_placeholder_in_paragraph(para, "XXX1", title)
             if "HHH1" in para.text:
-                replace_in_paragraph_runs(para, "HHH1", title)
+                replace_placeholder_in_paragraph(para, "HHH1", title)
     
     # Replace XXX1 and HHH1 in main document paragraphs
     for para in doc.paragraphs:
         if "XXX1" in para.text:
-            replace_in_paragraph_runs(para, "XXX1", title)
+            replace_placeholder_in_paragraph(para, "XXX1", title)
         if "HHH1" in para.text:
-            replace_in_paragraph_runs(para, "HHH1", title)
+            replace_placeholder_in_paragraph(para, "HHH1", title)
     
     # Replace XXX1 and HHH1 in tables
     for table in doc.tables:
@@ -1109,9 +1156,9 @@ def _replace_placeholders(doc: Document, title: str, base_url: str) -> None:
             for cell in row.cells:
                 for para in cell.paragraphs:
                     if "XXX1" in para.text:
-                        replace_in_paragraph_runs(para, "XXX1", title)
+                        replace_placeholder_in_paragraph(para, "XXX1", title)
                     if "HHH1" in para.text:
-                        replace_in_paragraph_runs(para, "HHH1", title)
+                        replace_placeholder_in_paragraph(para, "HHH1", title)
     
     # Replace FFF1 in footer (if template has it)
     for section in doc.sections:
