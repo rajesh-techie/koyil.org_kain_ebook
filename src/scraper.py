@@ -661,6 +661,22 @@ def _add_page_break(doc: Document):
     run._r.append(br)
 
 
+def _clear_all_headers_footers(doc: Document) -> None:
+    """Clear all headers and footers from all sections in the document."""
+    for section in doc.sections:
+        # Clear header
+        header = section.header
+        for para in list(header.paragraphs):
+            p = para._element
+            p.getparent().remove(p)
+        
+        # Clear footer
+        footer = section.footer
+        for para in list(footer.paragraphs):
+            p = para._element
+            p.getparent().remove(p)
+
+
 def _add_header(doc: Document, title: str = ""):
     """
     Add header with document title (parameter2) in blue color.
@@ -671,8 +687,13 @@ def _add_header(doc: Document, title: str = ""):
     """
     section = doc.sections[0]
     header = section.header
-    header_para = header.paragraphs[0]
-    header_para.text = ""
+    
+    # Clear any existing header content first
+    for para in list(header.paragraphs):
+        p = para._element
+        p.getparent().remove(p)
+    
+    header_para = header.add_paragraph()
     header_para.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     
     if not title:
@@ -1175,6 +1196,10 @@ def build_docx(
     # Create blank document if template loading failed or wasn't requested
     if doc is None:
         doc = Document()
+
+    # If template was loaded, clear its header/footer to avoid duplication
+    if language and cfg and doc is not None:
+        _clear_all_headers_footers(doc)
 
     # Add header and footer FIRST (before adding content)
     # This ensures they apply correctly to the document
