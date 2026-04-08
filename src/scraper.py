@@ -1047,19 +1047,26 @@ def _replace_placeholders(doc: Document, title: str, base_url: str) -> None:
     """Replace placeholders in document: XXX1, HHH1, FFF1 with appropriate values.
     Searches in headers, main content, footers, and all runs."""
     
+    def replace_in_run(run, title):
+        """Helper to replace placeholder text in a run using XML element."""
+        if run.text and ("XXX1" in run.text or "HHH1" in run.text):
+            # Get the XML element and find the text node
+            r_element = run._element
+            t_element = r_element.find(qn('w:t'))
+            if t_element is not None and t_element.text:
+                t_element.text = t_element.text.replace("XXX1", title).replace("HHH1", title)
+    
     # Replace XXX1 and HHH1 with title in header
     for section in doc.sections:
         header = section.header
         for para in header.paragraphs:
             for run in para.runs:
-                if "XXX1" in run.text or "HHH1" in run.text:
-                    run.text = run.text.replace("XXX1", title).replace("HHH1", title)
+                replace_in_run(run, title)
     
     # Replace XXX1 and HHH1 in main document paragraphs (search all runs)
     for para in doc.paragraphs:
         for run in para.runs:
-            if run.text and ("XXX1" in run.text or "HHH1" in run.text):
-                run.text = run.text.replace("XXX1", title).replace("HHH1", title)
+            replace_in_run(run, title)
     
     # Replace XXX1 and HHH1 in tables
     for table in doc.tables:
@@ -1067,8 +1074,7 @@ def _replace_placeholders(doc: Document, title: str, base_url: str) -> None:
             for cell in row.cells:
                 for para in cell.paragraphs:
                     for run in para.runs:
-                        if run.text and ("XXX1" in run.text or "HHH1" in run.text):
-                            run.text = run.text.replace("XXX1", title).replace("HHH1", title)
+                        replace_in_run(run, title)
     
     # Replace FFF1 in footer (if template has it)
     for section in doc.sections:
