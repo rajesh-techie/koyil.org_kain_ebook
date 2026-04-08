@@ -900,7 +900,12 @@ def _write_lines(doc: Document, items: list[dict]):
         if not runs:
             continue
         
-        p = doc.add_paragraph(style=style)
+        # Try to use requested style; fall back to Normal if style doesn't exist
+        try:
+            p = doc.add_paragraph(style=style)
+        except KeyError:
+            log.debug("Style '%s' not found in document; using 'Normal' instead", style)
+            p = doc.add_paragraph(style="Normal")
         for i, run_data in enumerate(runs):
             text = run_data.get("text", "")
             bold = run_data.get("bold", False)
