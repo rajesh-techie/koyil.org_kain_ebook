@@ -969,7 +969,8 @@ def build_docx(
         bm_name = bookmark_names[i]
         bm_id   = i + 1  # IDs start at 1
 
-        hdg = doc.add_heading(title, level=2)
+        # Use Heading 1 for chapters (same level as Introduction) so TOC alignment is consistent
+        hdg = doc.add_heading(title, level=1)
         # Make heading blue
         for run in hdg.runs:
             run.font.color.rgb = RGBColor(0, 51, 204)  # Blue color
