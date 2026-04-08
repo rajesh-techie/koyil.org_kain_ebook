@@ -276,6 +276,71 @@ def parse_lines(html: str, page_url: str = "", include_images: bool = False) -> 
                     process_node(child)
                 return
             
+            # Check if this block element contains <br> tags (which should split into separate items)
+            br_tags = node.find_all("br")
+            if br_tags:
+                # Split content by <br> tags and create separate items
+                parts = []
+                current_part = []
+                
+                for child in node.children:
+                    if hasattr(child, 'name') and child.name == "br":
+                        # <br> tag encountered, finalize current part
+                        if current_part:
+                            # Create a temporary container for this part
+                            temp_container = BeautifulSoup("", "lxml").new_tag("span")
+                            for item in current_part:
+                                temp_container.append(item)
+                            
+                            runs = extract_runs(temp_container)
+                            if runs:
+                                full_text = " ".join(r["text"] for r in runs)
+                                if full_text not in seen:
+                                    seen.add(full_text)
+                                    
+                                    if node.name in _HEADING_STYLE:
+                                        style = _HEADING_STYLE[node.name]
+                                    elif node.name == "li":
+                                        parent = node.parent
+                                        if parent and parent.name == "ol":
+                                            style = "List Number"
+                                        else:
+                                            style = "List Bullet"
+                                    else:
+                                        style = "Normal"
+                                    
+                                    items.append({"style": style, "runs": runs, "type": "text"})
+                            current_part = []
+                    else:
+                        current_part.append(child)
+                
+                # Process remaining part after last <br>
+                if current_part:
+                    temp_container = BeautifulSoup("", "lxml").new_tag("span")
+                    for item in current_part:
+                        temp_container.append(item)
+                    
+                    runs = extract_runs(temp_container)
+                    if runs:
+                        full_text = " ".join(r["text"] for r in runs)
+                        if full_text not in seen:
+                            seen.add(full_text)
+                            
+                            if node.name in _HEADING_STYLE:
+                                style = _HEADING_STYLE[node.name]
+                            elif node.name == "li":
+                                parent = node.parent
+                                if parent and parent.name == "ol":
+                                    style = "List Number"
+                                else:
+                                    style = "List Bullet"
+                            else:
+                                style = "Normal"
+                            
+                            items.append({"style": style, "runs": runs, "type": "text"})
+                return
+            
+            # Normal processing without <br> tags
             runs = extract_runs(node)
             if runs:
                 full_text = " ".join(r["text"] for r in runs)
