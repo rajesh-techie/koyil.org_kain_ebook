@@ -1047,34 +1047,64 @@ def _replace_placeholders(doc: Document, title: str, base_url: str) -> None:
     """Replace placeholders in document: XXX1, HHH1, FFF1 with appropriate values.
     Searches in headers, main content, footers, and all runs."""
     
-    def replace_in_run(run, title):
-        """Helper to replace placeholder text in a run using XML element."""
-        if run.text and ("XXX1" in run.text or "HHH1" in run.text):
-            # Get the XML element and find the text node
-            r_element = run._element
-            t_element = r_element.find(qn('w:t'))
-            if t_element is not None and t_element.text:
-                t_element.text = t_element.text.replace("XXX1", title).replace("HHH1", title)
+    def replace_placeholder_in_paragraph(para, placeholder, replacement):
+        """Replace placeholder in all runs of a paragraph."""
+        # Collect all text from all runs
+        full_text = para.text
+        if placeholder in full_text:
+            # Replace placeholder in full text
+            new_text = full_text.replace(placeholder, replacement)
+            
+            # Save formatting from first run (if available)
+            font_name = None
+            font_size = None
+            font_color = None
+            if para.runs:
+                first_run = para.runs[0]
+                font_name = first_run.font.name
+                font_size = first_run.font.size
+                font_color = first_run.font.color.rgb
+            
+            # Clear all existing runs in the paragraph
+            for run in para.runs[:]:  # Iterate over a copy
+                r = run._element
+                r.getparent().remove(r)
+            
+            # Add new run with replaced text (preserving original formatting if possible)
+            new_run = para.add_run(new_text)
+            if font_name:
+                new_run.font.name = font_name
+            if font_size:
+                new_run.font.size = font_size
+            if font_color:
+                new_run.font.color.rgb = font_color
     
     # Replace XXX1 and HHH1 with title in header
     for section in doc.sections:
         header = section.header
         for para in header.paragraphs:
-            for run in para.runs:
-                replace_in_run(run, title)
+            # Replace both XXX1 and HHH1
+            if "XXX1" in para.text:
+                replace_placeholder_in_paragraph(para, "XXX1", title)
+            if "HHH1" in para.text:
+                replace_placeholder_in_paragraph(para, "HHH1", title)
     
-    # Replace XXX1 and HHH1 in main document paragraphs (search all runs)
+    # Replace XXX1 and HHH1 in main document paragraphs
     for para in doc.paragraphs:
-        for run in para.runs:
-            replace_in_run(run, title)
+        if "XXX1" in para.text:
+            replace_placeholder_in_paragraph(para, "XXX1", title)
+        if "HHH1" in para.text:
+            replace_placeholder_in_paragraph(para, "HHH1", title)
     
     # Replace XXX1 and HHH1 in tables
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
                 for para in cell.paragraphs:
-                    for run in para.runs:
-                        replace_in_run(run, title)
+                    if "XXX1" in para.text:
+                        replace_placeholder_in_paragraph(para, "XXX1", title)
+                    if "HHH1" in para.text:
+                        replace_placeholder_in_paragraph(para, "HHH1", title)
     
     # Replace FFF1 in footer (if template has it)
     for section in doc.sections:
