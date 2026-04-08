@@ -717,12 +717,12 @@ def _add_page_numbers(doc: Document, parameter1: str = "", page_url: str = ""):
     section = doc.sections[0]
     footer = section.footer
     
-    # Clear existing footer paragraphs if any
-    for para in footer.paragraphs:
-        p = para._element
+    # Remove ALL existing paragraphs from footer - we'll create fresh ones
+    while len(footer.paragraphs) > 0:
+        p = footer.paragraphs[0]._element
         p.getparent().remove(p)
     
-    # Create new footer paragraph
+    # Create new footer paragraph from scratch
     footer_para = footer.add_paragraph()
 
     # Build footer with 3 sections: left | center page # | right
@@ -732,22 +732,6 @@ def _add_page_numbers(doc: Document, parameter1: str = "", page_url: str = ""):
 
     # Left: parameter1 (URL) as hyperlink in blue
     if parameter1:
-        # Add hyperlink using raw XML to make it clickable
-        from docx.oxml import OxmlElement as OE
-        hyperlink = OE('w:hyperlink')
-        hyperlink.set(qn('w:anchor'), parameter1.replace('https://', '').replace('http://', '').split('/')[0])
-        
-        run_left = OE('w:r')
-        rPr = OE('w:rPr')
-        run_left.append(rPr)
-        
-        t = OE('w:t')
-        t.text = parameter1
-        run_left.append(t)
-        hyperlink.append(run_left)
-        footer_para._p.append(hyperlink)
-        
-        # Also add as plain text with hyperlink style and blue color
         run_left_text = footer_para.add_run(parameter1)
         run_left_text.font.size = Pt(10)
         run_left_text.font.color.rgb = RGBColor(0, 51, 204)  # Blue
