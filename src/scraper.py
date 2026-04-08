@@ -128,6 +128,11 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="Document title to be used in header and TOC.",
     )
+    parser.add_argument(
+        "--language",
+        default="english",
+        help="Language for template selection (english, tamil, hindi, telugu, malayalam, kannada). Default: english",
+    )
     return parser.parse_args()
 
 
@@ -909,6 +914,115 @@ def _write_lines(doc: Document, items: list[dict]):
                 run.italic = italic
 
 
+def _copy_template_content(doc: Document, template_path: str) -> None:
+    """Copy all content from template DOCX into the current document."""
+    if not Path(template_path).exists():
+        log.warning("Template file not found: %s", template_path)
+        return
+    
+    try:
+        template_doc = Document(template_path)
+        
+        # Copy all paragraphs from template
+        for para in template_doc.paragraphs:
+            new_para = doc.add_paragraph(style=para.style)
+            # Copy paragraph properties
+            new_para.paragraph_format.left_indent = para.paragraph_format.left_indent
+            new_para.paragraph_format.right_indent = para.paragraph_format.right_indent
+            new_para.paragraph_format.first_line_indent = para.paragraph_format.first_line_indent
+            new_para.paragraph_format.space_before = para.paragraph_format.space_before
+            new_para.paragraph_format.space_after = para.paragraph_format.space_after
+            new_para.paragraph_format.line_spacing = para.paragraph_format.line_spacing
+            new_para.alignment = para.alignment
+            
+            # Copy runs with formatting
+            for run in para.runs:
+                new_run = new_para.add_run(run.text)
+                if run.font.bold:
+                    new_run.font.bold = True
+                if run.font.italic:
+                    new_run.font.italic = True
+                if run.font.underline:
+                    new_run.font.underline = True
+                if run.font.size:
+                    new_run.font.size = run.font.size
+                if run.font.color.rgb:
+                    new_run.font.color.rgb = run.font.color.rgb
+        
+        # Copy tables from template if present
+        for table in template_doc.tables:
+            tbl = table._tbl
+            new_tbl = doc._element.add_tbl()
+            for row in tbl.tr_lst:
+                new_row = new_tbl.add_tr()
+                for cell in row.tc_lst:
+                    new_cell = new_row.add_tc()
+                    new_cell._element.getparent().replace(cell, new_cell._element)
+        
+        log.info("Template content copied: %s", template_path)
+    except Exception as e:
+        log.error("Error copying template: %s", e)
+
+
+def _replace_placeholders(doc: Document, title: str, base_url: str) -> None:
+    """Replace placeholders in document: XXX1, HHH1, FFF1 with appropriate values."""
+    # Replace XXX1 and HHH1 with title
+    for para in doc.paragraphs:
+        if "XXX1" in para.text or "HHH1" in para.text:
+            for run in para.runs:
+                run.text = run.text.replace("XXX1", title).replace("HHH1", title)
+    
+    # Replace FFF1 in footer with format: URL | page# | koyil.org
+    # For now we'll mark it - actual page numbers will update in Word when F9 is pressed
+    for section in doc.sections:
+        footer = section.footer
+        for para in footer.paragraphs:
+            if "FFF1" in para.text:
+                para.clear()
+                # Create 3-part footer: URL | PAGE | koyil.org
+                para.paragraph_format.tab_stops.add_tab_stop(Pt(3.5 * 72))  # Center
+                para.paragraph_format.tab_stops.add_tab_stop(Pt(7 * 72))    # Right
+                
+                run = para.add_run(base_url if base_url else "")
+                run.font.name = "Arial"
+                run.font.size = Pt(10)
+                
+                para.add_run("\t")
+                
+                run = para.add_run()
+                from docx.oxml import parse_xml
+                fldChar1 = parse_xml(r'<w:fldChar {} w:fldCharType="begin"/>'.format('xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'))
+                run._r.append(fldChar1)
+                run = para.add_run()
+                instrText = parse_xml(r'<w:instrText {} xml:space="preserve">PAGE</w:instrText>'.format('xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'))
+                run._r.append(instrText)
+                run = para.add_run()
+                fldChar2 = parse_xml(r'<w:fldChar {} w:fldCharType="end"/>'.format('xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'))
+                run._r.append(fldChar2)
+                
+                para.add_run("\t")
+                
+                run = para.add_run("koyil.org")
+                run.font.name = "Arial"
+                run.font.size = Pt(10)
+
+
+def _load_template_path(language: str, cfg: dict) -> str:
+    """Get the full path to the template file for the given language."""
+    template_folder = cfg.get("template_folder", "")
+    templates = cfg.get("templates", {})
+    
+    lang_lower = language.lower()
+    template_name = templates.get(lang_lower)
+    
+    if not template_name:
+        log.warning("Language '%s' not found in config. Available: %s", language, ", ".join(templates.keys()))
+        return ""
+    
+    full_path = str(Path(template_folder) / template_name)
+    return full_path
+
+
 def build_docx(
     output_path,
     main_content_lines: list[str],
@@ -916,6 +1030,8 @@ def build_docx(
     chapter_contents: list[dict],
     base_url: str = "",
     title: str = "",
+    language: str = "english",
+    cfg: dict = None,
 ) -> None:
     """
     Build and save the final .docx document in pure OOXML format.
@@ -926,8 +1042,19 @@ def build_docx(
       Page 3+ — Chapter 1 Heading 2 + content (with inline images)
                  Chapter 2 Heading 2 + content (with inline images)
                  ...
+    
+    If language and cfg provided, loads template first and copies its content.
     """
-    doc = Document()
+    # Load template if language is provided
+    if language and cfg:
+        template_path = _load_template_path(language, cfg)
+        if template_path:
+            doc = Document(template_path)
+            log.info("Starting with template for language: %s", language)
+        else:
+            doc = Document()
+    else:
+        doc = Document()
 
     # Add header and footer FIRST (before adding content)
     # This ensures they apply correctly to the document
@@ -986,6 +1113,12 @@ def build_docx(
         _add_page_break(doc)
 
     # -------------------------------------------------------------------
+    # Replace placeholders if template was used
+    # -------------------------------------------------------------------
+    if language and cfg:
+        _replace_placeholders(doc, title, base_url)
+
+    # -------------------------------------------------------------------
     # Save (delete existing file first)
     # -------------------------------------------------------------------
     # Delete existing file if it exists (can't overwrite while locked)
@@ -1015,10 +1148,12 @@ def main():
     url = validate_url(args.url)
     output_path = validate_output_path(args.output)
     title = args.title
+    language = args.language
 
     log.info("Input URL   : %s", url)
     log.info("Output file : %s", output_path)
     log.info("Document title: %s", title)
+    log.info("Template language: %s", language)
 
     # Clean up old DOCX files in the working directory
     from pathlib import Path
@@ -1075,7 +1210,7 @@ def main():
 
         # Task 5 — build and save the DOCX
         log.info("Building DOCX document ...")
-        build_docx(output_path, content_items, chapters, chapter_contents, url, title)
+        build_docx(output_path, content_items, chapters, chapter_contents, url, title, language, cfg)
 
         browser.close()
 
