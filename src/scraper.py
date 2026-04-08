@@ -898,6 +898,11 @@ def build_docx(
     """
     doc = Document()
 
+    # Add header and footer FIRST (before adding content)
+    # This ensures they apply correctly to the document
+    _add_header(doc, title)
+    _add_page_numbers(doc, base_url)
+
     # Pre-compute bookmark names for all chapters (needed in both TOC and headings)
     bookmark_names = [
         _make_bookmark_name(i, ch["title"])
@@ -907,7 +912,9 @@ def build_docx(
     # -------------------------------------------------------------------
     # Page 1 — TOC
     # -------------------------------------------------------------------
-    doc.add_heading("Table of Contents", level=1)
+    # Use Title style instead of Heading 1, so it doesn't appear in the auto-generated TOC
+    toc_para = doc.add_paragraph("Table of Contents", style="Title")
+    toc_para.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     # Embed a Word TOC field (auto-updates page numbers in MS Word with F9)
     _add_toc_field(doc)
@@ -955,10 +962,6 @@ def build_docx(
             log.info("Deleted existing file: %s", output_path)
         except OSError as exc:
             log.warning("Could not delete existing file: %s", exc)
-
-    # Add header and footer
-    _add_header(doc, title)
-    _add_page_numbers(doc, base_url)
 
     # Save document
     doc.save(str(output_path))
