@@ -970,7 +970,9 @@ def build_docx(
         bm_id   = i + 1  # IDs start at 1
 
         # Use Heading 1 for chapters (same level as Introduction) so TOC alignment is consistent
-        hdg = doc.add_heading(title, level=1)
+        # Add sequence number to chapter title for TOC numbering
+        numbered_title = f"{i + 1}. {title}"
+        hdg = doc.add_heading(numbered_title, level=1)
         # Make heading blue
         for run in hdg.runs:
             run.font.color.rgb = RGBColor(0, 51, 204)  # Blue color
