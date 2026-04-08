@@ -588,7 +588,13 @@ def detect_chapters(html: str, base_url: str, toc_selector: str, max_chapters: i
         title = a_tag.get_text(separator=" ", strip=True)
         if not title:
             title = abs_url  # fallback: use URL if link has no visible text
-
+        
+        # Clean up chapter title: remove common prefix characters (dashes, bullets, symbols)
+        # These often appear as HTML list markers or separators
+        title = title.lstrip("–—-•·‣»›:[] ").strip()
+        if not title:
+            title = abs_url  # fallback if title becomes empty after cleaning
+        
         # Skip self-referencing links (Table of Contents, Introduction, current page URL)
         title_lower = title.lower()
         if title_lower in ("table of contents", "introduction"):
