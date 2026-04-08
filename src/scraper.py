@@ -950,7 +950,12 @@ def _get_available_style(doc: Document, requested_style: str) -> str:
 
 def _write_lines(doc: Document, items: list[dict]):
     """Write structured items as DOCX paragraphs, preserving formatting (bold/italic).
-    Handles both text items and image items."""
+    Handles both text items and image items. URLs are formatted in blue."""
+    import re
+    
+    url_pattern = re.compile(r'https?://[^\s]+|www\.[^\s]+')
+    blue_color = RGBColor(0, 51, 204)  # Same blue as header/footer
+    
     for item in items:
         # Handle image items
         if item.get("type") == "image":
@@ -988,9 +993,35 @@ def _write_lines(doc: Document, items: list[dict]):
                 # Add space between runs if needed (unless at start or after space)
                 if i > 0 and not text.startswith(" ") and not runs[i-1].get("text", "").endswith(" "):
                     p.add_run(" ")
-                run = p.add_run(text)
-                run.bold = bold
-                run.italic = italic
+                
+                # Detect URLs in text and format them in blue
+                last_end = 0
+                for url_match in url_pattern.finditer(text):
+                    # Add non-URL text before this URL
+                    if url_match.start() > last_end:
+                        run = p.add_run(text[last_end:url_match.start()])
+                        run.bold = bold
+                        run.italic = italic
+                    
+                    # Add URL text in blue
+                    url_text = url_match.group(0)
+                    url_run = p.add_run(url_text)
+                    url_run.font.color.rgb = blue_color
+                    url_run.bold = bold
+                    url_run.italic = italic
+                    
+                    last_end = url_match.end()
+                
+                # Add remaining non-URL text
+                if last_end < len(text):
+                    run = p.add_run(text[last_end:])
+                    run.bold = bold
+                    run.italic = italic
+                elif last_end == 0:
+                    # No URLs found, add text normally
+                    run = p.add_run(text)
+                    run.bold = bold
+                    run.italic = italic
 
 
 def _copy_template_content(doc: Document, template_path: str) -> None:
