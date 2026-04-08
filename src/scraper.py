@@ -123,6 +123,11 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="Full file path for the output document (must end in .docx).",
     )
+    parser.add_argument(
+        "--title",
+        required=True,
+        help="Document title to be used in header and TOC.",
+    )
     return parser.parse_args()
 
 
@@ -320,16 +325,17 @@ def _line_matches_any(line: str, markers: list[str]) -> bool:
     return any(m.lower() in line_lower for m in markers)
 
 
-def extract_content(items: list[dict], start_markers: list[str], stop_markers: list[str], remove_text: list[str] = None) -> list[dict]:
+def extract_content(items: list[dict], start_markers: list[str], stop_markers: list[str], remove_text: list[str] = None, parameter1: str = "") -> list[dict]:
     """
     Return the slice of items between the start and stop markers.
 
     Start rule : find the first item whose text contains any start_marker.
                  Include the item BEFORE that match (one item prior).
     Stop rule  : find the first item (after start) whose text contains any
-                 stop_marker. Stop one item BEFORE that match.
+                 stop_marker. Include the stop marker line itself.
 
     Then filter out any items whose full text matches any remove_text entries (case-insensitive).
+    Then append a new "Content Source" line with parameter1 (URL).
 
     Returns an empty list if start marker is not found.
     """
@@ -356,8 +362,8 @@ def extract_content(items: list[dict], start_markers: list[str], stop_markers: l
         if i == start_idx:
             continue  # never match stop on the very first item
         if _line_matches_any(text, stop_markers):
-            stop_idx = i  # Slice is exclusive, so this excludes the marker itself
-            log.info("Stop marker found at item %d: %r  — stopping before it",
+            stop_idx = i + 1  # Slice is exclusive, so this includes the marker itself
+            log.info("Stop marker found at item %d: %r  — including it",
                      i, text[:80])
             break
 
@@ -379,6 +385,15 @@ def extract_content(items: list[dict], start_markers: list[str], stop_markers: l
                 filtered.append(item)
         extracted = filtered
         log.info("After filtering remove_text: %d items remaining (was %d).", len(extracted), len(extracted) + (len([i for i in items[start_idx:stop_idx] if " ".join(r.get("text", "") for r in i.get("runs", [])).lower() in remove_text_lower])))
+    
+    # Append "Content Source" line with parameter1 (URL) if provided
+    if parameter1:
+        extracted.append({
+            "style": "Normal",
+            "runs": [{"text": f"Content Source - {parameter1}", "bold": False, "italic": False}],
+            "type": "text"
+        })
+        log.info("Added Content Source line: %s", parameter1)
     
     log.info("Extracted %d items from page.", len(extracted))
     return extracted
@@ -411,7 +426,7 @@ def scrape_page(page, cfg: dict, page_url: str = "") -> list[dict]:
         log.warning("Page produced no text — check URL or page structure.")
         return []
 
-    return extract_content(items, start_markers, stop_markers, remove_text)
+    return extract_content(items, start_markers, stop_markers, remove_text, page_url)
 
 
 # ---------------------------------------------------------------------------
@@ -484,6 +499,15 @@ def detect_chapters(html: str, base_url: str, toc_selector: str, max_chapters: i
         if not title:
             title = abs_url  # fallback: use URL if link has no visible text
 
+        # Skip self-referencing links (Table of Contents, Introduction, current page URL)
+        title_lower = title.lower()
+        if title_lower in ("table of contents", "introduction"):
+            log.debug("Skipping self-reference: %s", title)
+            continue
+        if abs_url.rstrip("/").lower() == base_url.rstrip("/").lower():
+            log.debug("Skipping current page link: %s", title)
+            continue
+
         chapters.append({"title": title, "url": abs_url})
 
         if len(chapters) >= max_chapters:
@@ -536,12 +560,13 @@ def _add_page_break(doc: Document):
     run._r.append(br)
 
 
-def _add_header(doc: Document):
+def _add_header(doc: Document, title: str = ""):
     """
-    Add header with koyil.org link.
+    Add header with document title (parameter2).
     
     Args:
         doc: Document object
+        title: Document title to display in header
     """
     section = doc.sections[0]
     header = section.header
@@ -549,38 +574,39 @@ def _add_header(doc: Document):
     header_para.text = ""
     header_para.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     
-    run = header_para.add_run("http://koyil.org")
+    if not title:
+        title = "http://koyil.org"
+    
+    run = header_para.add_run(title)
     run.font.size = Pt(10)
 
 
-def _add_page_numbers(doc: Document, page_url: str = ""):
+def _add_page_numbers(doc: Document, parameter1: str = "", page_url: str = ""):
     """
-    Add footer with website link and page numbering.
-    Format: [divyaprabandham.koyil.org] [centered page X]
+    Add footer with parameter1 (URL), page numbering, and koyil.org.
+    Format: [parameter1] [centered page X] [right-koyil.org]
     
     Args:
         doc: Document object
-        page_url: URL of the page being scraped (e.g., https://divyaprabandham.koyil.org/...)
+        parameter1: URL of the source (left-aligned)
+        page_url: URL of the page being scraped (for legacy support)
     """
     section = doc.sections[0]
     footer = section.footer
     footer_para = footer.paragraphs[0]
     footer_para.text = ""
 
-    # Extract domain from URL for display
-    parsed_url = urlparse(page_url) if page_url else None
-    
-    # Build footer with 2 tabs: left link | center page #
+    # Build footer with 3 sections: left | center page # | right
+    # Tab stop at 3.25" for center, 6.5" for right
     footer_para.paragraph_format.tab_stops.add_tab_stop(Inches(3.25), WD_TAB_ALIGNMENT.CENTER)
+    footer_para.paragraph_format.tab_stops.add_tab_stop(Inches(6.5), WD_TAB_ALIGNMENT.RIGHT)
 
-    # Left: divyaprabandham.koyil.org link
-    if parsed_url and 'divyaprabandham' in parsed_url.netloc:
-        url_display = parsed_url.netloc  # e.g., "divyaprabandham.koyil.org"
-        run_left = footer_para.add_run(url_display)
-        run_left.font.size = Pt(10)
+    # Left: parameter1 (URL)
+    if parameter1:
+        run_left = footer_para.add_run(parameter1)
     else:
-        run_left = footer_para.add_run("http://divyaprabandham.koyil.org")
-        run_left.font.size = Pt(10)
+        run_left = footer_para.add_run("http://koyil.org")
+    run_left.font.size = Pt(10)
 
     # Tab to center
     footer_para.add_run("\t")
@@ -610,6 +636,13 @@ def _add_page_numbers(doc: Document, page_url: str = ""):
     fld_char_end.set(qn("w:fldCharType"), "end")
     run_end = footer_para.add_run()
     run_end._r.append(fld_char_end)
+
+    # Tab to right
+    footer_para.add_run("\t")
+
+    # Right: koyil.org
+    run_right = footer_para.add_run("koyil.org")
+    run_right.font.size = Pt(10)
 
 
 def _make_bookmark_name(index: int, title: str) -> str:
@@ -786,6 +819,7 @@ def build_docx(
     chapters: list[dict],
     chapter_contents: list[dict],
     base_url: str = "",
+    title: str = "",
 ) -> None:
     """
     Build and save the final .docx document in pure OOXML format.
@@ -858,7 +892,7 @@ def build_docx(
             log.warning("Could not delete existing file: %s", exc)
 
     # Add header and footer
-    _add_header(doc)
+    _add_header(doc, title)
     _add_page_numbers(doc, base_url)
 
     # Save document
@@ -878,9 +912,11 @@ def main():
     # Validate inputs before doing anything expensive
     url = validate_url(args.url)
     output_path = validate_output_path(args.output)
+    title = args.title
 
     log.info("Input URL   : %s", url)
     log.info("Output file : %s", output_path)
+    log.info("Document title: %s", title)
 
     # Clean up old DOCX files in the working directory
     from pathlib import Path
@@ -937,7 +973,7 @@ def main():
 
         # Task 5 — build and save the DOCX
         log.info("Building DOCX document ...")
-        build_docx(output_path, content_items, chapters, chapter_contents, url)
+        build_docx(output_path, content_items, chapters, chapter_contents, url, title)
 
         browser.close()
 

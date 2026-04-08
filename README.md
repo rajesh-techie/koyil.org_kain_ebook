@@ -45,9 +45,53 @@ playwright install chromium
 
 ## Usage
 
+### Generate DOCX from website
+
 ```powershell
-python src\scraper.py --url "https://example.com/page" --output "D:\output\myfile.docx"
+python src\scraper.py --url "https://example.com/page" --output "D:\output\myfile.docx" --title "My Document Title"
 ```
+
+**Parameters:**
+- `--url` (required): Full URL of the page to scrape (http/https only)
+- `--output` (required): Full file path for output document (must end in .docx)
+- `--title` (required): Document title (used in header and table of contents)
+
+**Example:**
+```powershell
+python src\scraper.py `
+  --url "https://divyaprabandham.koyil.org/index.php/2020/11/thiruviruththam/" `
+  --output "D:\output\priya_tirumozi.docx" `
+  --title "SrI Kural - PriAya TiruviruththAm"
+```
+
+### Convert DOCX to PDF
+
+After generating the .docx file, convert it to PDF using:
+
+```powershell
+.\src\convert-docx-to-pdf.ps1 -InputPath "D:\output\myfile.docx"
+```
+
+**Parameters:**
+- `-InputPath` (required): Full path to the .docx file
+- `-OutputPath` (optional): Full path for output .pdf file (defaults to same directory/name with .pdf extension)
+- `-OpenPDF` (optional): Boolean to open PDF after conversion (default: $false)
+
+**Examples:**
+```powershell
+# Convert to PDF in same directory
+.\src\convert-docx-to-pdf.ps1 -InputPath "D:\output\priya_tirumozi.docx"
+
+# Specify custom output location
+.\src\convert-docx-to-pdf.ps1 -InputPath "D:\output\priya_tirumozi.docx" -OutputPath "C:\pdfs\priya_tirumozi.pdf"
+
+# Convert and open PDF
+.\src\convert-docx-to-pdf.ps1 -InputPath "D:\output\priya_tirumozi.docx" -OpenPDF $true
+```
+
+**Requirements for PDF conversion:**
+- Microsoft Word must be installed
+- Script requires Windows 10/11
 
 ### Arguments
 
