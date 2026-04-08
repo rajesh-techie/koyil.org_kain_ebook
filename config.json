@@ -23,7 +23,7 @@
 
   "toc_selector": "li > a[href]",
 
-  "max_chapters": 4,
+  "max_chapters": 150,
 
   "reading_mode": true,
 
