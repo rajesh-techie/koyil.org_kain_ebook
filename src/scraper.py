@@ -663,7 +663,7 @@ def _add_page_break(doc: Document):
 
 def _add_header(doc: Document, title: str = ""):
     """
-    Add header with document title (parameter2).
+    Add header with document title (parameter2) in blue color.
     
     Args:
         doc: Document object
@@ -680,34 +680,61 @@ def _add_header(doc: Document, title: str = ""):
     
     run = header_para.add_run(title)
     run.font.size = Pt(10)
+    run.font.color.rgb = RGBColor(0, 51, 204)  # Blue color
 
 
 def _add_page_numbers(doc: Document, parameter1: str = "", page_url: str = ""):
     """
-    Add footer with parameter1 (URL), page numbering, and koyil.org.
-    Format: [parameter1] [centered page X] [right-koyil.org]
+    Add footer with parameter1 (URL as hyperlink), page numbering, and koyil.org (blue color).
+    Format: [parameter1-hyperlink] [centered page X] [right-koyil.org]
     
     Args:
         doc: Document object
-        parameter1: URL of the source (left-aligned)
+        parameter1: URL of the source (left-aligned, as hyperlink)
         page_url: URL of the page being scraped (for legacy support)
     """
     section = doc.sections[0]
     footer = section.footer
-    footer_para = footer.paragraphs[0]
-    footer_para.text = ""
+    
+    # Clear existing footer paragraphs if any
+    for para in footer.paragraphs:
+        p = para._element
+        p.getparent().remove(p)
+    
+    # Create new footer paragraph
+    footer_para = footer.add_paragraph()
 
     # Build footer with 3 sections: left | center page # | right
     # Tab stop at 3.25" for center, 6.5" for right
     footer_para.paragraph_format.tab_stops.add_tab_stop(Inches(3.25), WD_TAB_ALIGNMENT.CENTER)
     footer_para.paragraph_format.tab_stops.add_tab_stop(Inches(6.5), WD_TAB_ALIGNMENT.RIGHT)
 
-    # Left: parameter1 (URL)
+    # Left: parameter1 (URL) as hyperlink in blue
     if parameter1:
-        run_left = footer_para.add_run(parameter1)
+        # Add hyperlink using raw XML to make it clickable
+        from docx.oxml import OxmlElement as OE
+        hyperlink = OE('w:hyperlink')
+        hyperlink.set(qn('w:anchor'), parameter1.replace('https://', '').replace('http://', '').split('/')[0])
+        
+        run_left = OE('w:r')
+        rPr = OE('w:rPr')
+        run_left.append(rPr)
+        
+        t = OE('w:t')
+        t.text = parameter1
+        run_left.append(t)
+        hyperlink.append(run_left)
+        footer_para._p.append(hyperlink)
+        
+        # Also add as plain text with hyperlink style and blue color
+        run_left_text = footer_para.add_run(parameter1)
+        run_left_text.font.size = Pt(10)
+        run_left_text.font.color.rgb = RGBColor(0, 51, 204)  # Blue
+        run_left_text.font.underline = True  # Underline for hyperlink appearance
     else:
         run_left = footer_para.add_run("http://koyil.org")
-    run_left.font.size = Pt(10)
+        run_left.font.size = Pt(10)
+        run_left.font.color.rgb = RGBColor(0, 51, 204)
 
     # Tab to center
     footer_para.add_run("\t")
@@ -741,9 +768,10 @@ def _add_page_numbers(doc: Document, parameter1: str = "", page_url: str = ""):
     # Tab to right
     footer_para.add_run("\t")
 
-    # Right: koyil.org
+    # Right: koyil.org in blue
     run_right = footer_para.add_run("koyil.org")
     run_right.font.size = Pt(10)
+    run_right.font.color.rgb = RGBColor(0, 51, 204)  # Blue
 
 
 def _make_bookmark_name(index: int, title: str) -> str:
@@ -1011,46 +1039,84 @@ def _copy_template_content(doc: Document, template_path: str) -> None:
 
 
 def _replace_placeholders(doc: Document, title: str, base_url: str) -> None:
-    """Replace placeholders in document: XXX1, HHH1, FFF1 with appropriate values."""
-    # Replace XXX1 and HHH1 with title
-    for para in doc.paragraphs:
-        if "XXX1" in para.text or "HHH1" in para.text:
+    """Replace placeholders in document: XXX1, HHH1, FFF1 with appropriate values.
+    Searches in headers, main content, footers, and all runs."""
+    
+    # Replace XXX1 and HHH1 with title in header
+    for section in doc.sections:
+        header = section.header
+        for para in header.paragraphs:
             for run in para.runs:
+                if "XXX1" in run.text or "HHH1" in run.text:
+                    run.text = run.text.replace("XXX1", title).replace("HHH1", title)
+    
+    # Replace XXX1 and HHH1 in main document paragraphs (search all runs)
+    for para in doc.paragraphs:
+        for run in para.runs:
+            if run.text and ("XXX1" in run.text or "HHH1" in run.text):
                 run.text = run.text.replace("XXX1", title).replace("HHH1", title)
     
-    # Replace FFF1 in footer with format: URL | page# | koyil.org
-    # For now we'll mark it - actual page numbers will update in Word when F9 is pressed
+    # Replace XXX1 and HHH1 in tables
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for para in cell.paragraphs:
+                    for run in para.runs:
+                        if run.text and ("XXX1" in run.text or "HHH1" in run.text):
+                            run.text = run.text.replace("XXX1", title).replace("HHH1", title)
+    
+    # Replace FFF1 in footer (if template has it)
     for section in doc.sections:
         footer = section.footer
+        footer_has_fff1 = False
         for para in footer.paragraphs:
             if "FFF1" in para.text:
-                para.clear()
-                # Create 3-part footer: URL | PAGE | koyil.org
-                para.paragraph_format.tab_stops.add_tab_stop(Pt(3.5 * 72))  # Center
-                para.paragraph_format.tab_stops.add_tab_stop(Pt(7 * 72))    # Right
-                
-                run = para.add_run(base_url if base_url else "")
-                run.font.name = "Arial"
-                run.font.size = Pt(10)
-                
-                para.add_run("\t")
-                
-                run = para.add_run()
-                from docx.oxml import parse_xml
-                fldChar1 = parse_xml(r'<w:fldChar {} w:fldCharType="begin"/>'.format('xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'))
-                run._r.append(fldChar1)
-                run = para.add_run()
-                instrText = parse_xml(r'<w:instrText {} xml:space="preserve">PAGE</w:instrText>'.format('xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'))
-                run._r.append(instrText)
-                run = para.add_run()
-                fldChar2 = parse_xml(r'<w:fldChar {} w:fldCharType="end"/>'.format('xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'))
-                run._r.append(fldChar2)
-                
-                para.add_run("\t")
-                
-                run = para.add_run("koyil.org")
-                run.font.name = "Arial"
-                run.font.size = Pt(10)
+                footer_has_fff1 = True
+                break
+        
+        # Only recreate footer if FFF1 placeholder exists
+        if footer_has_fff1:
+            # Clear existing footer
+            for para in footer.paragraphs:
+                p = para._element
+                p.getparent().remove(p)
+            
+            # Create new footer with proper formatting
+            footer_para = footer.add_paragraph()
+            footer_para.paragraph_format.tab_stops.add_tab_stop(Inches(3.25), WD_TAB_ALIGNMENT.CENTER)
+            footer_para.paragraph_format.tab_stops.add_tab_stop(Inches(6.5), WD_TAB_ALIGNMENT.RIGHT)
+            
+            # Left: URL as hyperlink in blue
+            run_left = footer_para.add_run(base_url if base_url else "http://koyil.org")
+            run_left.font.name = "Arial"
+            run_left.font.size = Pt(10)
+            run_left.font.color.rgb = RGBColor(0, 51, 204)
+            run_left.font.underline = True
+            
+            footer_para.add_run("\t")
+            
+            # Center: page number
+            run_page = footer_para.add_run()
+            from docx.oxml import parse_xml
+            fldChar1 = parse_xml(r'<w:fldChar {} w:fldCharType="begin"/>'.format('xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'))
+            run_page._r.append(fldChar1)
+            run = footer_para.add_run()
+            instrText = parse_xml(r'<w:instrText {} xml:space="preserve">PAGE</w:instrText>'.format('xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'))
+            run._r.append(instrText)
+            run = footer_para.add_run()
+            fldChar2 = parse_xml(r'<w:fldChar {} w:fldCharType="end"/>'.format('xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'))
+            run._r.append(fldChar2)
+            
+            run_num = footer_para.add_run("1")
+            run_num.font.size = Pt(10)
+            
+            footer_para.add_run("\t")
+            
+            # Right: koyil.org in blue
+            run_right = footer_para.add_run("koyil.org")
+            run_right.font.name = "Arial"
+            run_right.font.size = Pt(10)
+            run_right.font.color.rgb = RGBColor(0, 51, 204)
 
 
 def _load_template_path(language: str, cfg: dict) -> str:
