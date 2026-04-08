@@ -220,7 +220,11 @@ def parse_lines(html: str, page_url: str = "", include_images: bool = False) -> 
         Walk element tree and extract list of {"text": str, "bold": bool, "italic": bool}.
         Applies formatting based on parent tags.
         Preserves word spacing by not stripping whitespace from text nodes.
+        Skips problematic formatting tags like underline, strikethrough, mark, etc.
         """
+        # Tags to skip (these don't map to standard markdown and can cause formatting issues)
+        _SKIP_TAGS = {"u", "s", "strike", "del", "mark", "sup", "sub", "abbr", "code", "kbd"}
+        
         def walk_text(node, bold=False, italic=False, is_root=False):
             """Recursively walk node, collecting text with formatting."""
             runs = []
@@ -241,7 +245,14 @@ def parse_lines(html: str, page_url: str = "", include_images: bool = False) -> 
                 if not is_root and node.name in _BLOCK_CONTENT_TAGS:
                     return runs
                 
-                # Apply formatting for inline tags
+                # Skip problematic formatting tags but extract their text
+                if node.name in _SKIP_TAGS:
+                    # Extract text from skip tags without applying their formatting
+                    for child in node.children:
+                        runs.extend(walk_text(child, bold, italic, is_root=False))
+                    return runs
+                
+                # Apply formatting for standard inline tags
                 new_bold = bold or (node.name in {"b", "strong"})
                 new_italic = italic or (node.name in {"i", "em"})
                 
@@ -277,22 +288,29 @@ def parse_lines(html: str, page_url: str = "", include_images: bool = False) -> 
                 return
             
             # Check if this block element contains <br> tags (which should split into separate items)
-            br_tags = node.find_all("br")
+            br_tags = list(node.find_all("br", recursive=False))  # Only direct BR children
             if br_tags:
-                # Split content by <br> tags and create separate items
-                parts = []
+                # Split content by direct <br> tags and create separate items
                 current_part = []
                 
-                for child in node.children:
+                for child in list(node.children):  # Use list() to avoid iterator issues
                     if hasattr(child, 'name') and child.name == "br":
                         # <br> tag encountered, finalize current part
                         if current_part:
-                            # Create a temporary container for this part
-                            temp_container = BeautifulSoup("", "lxml").new_tag("span")
-                            for item in current_part:
-                                temp_container.append(item)
+                            # Build runs directly from the parts without moving nodes
+                            runs = []
+                            for part in current_part:
+                                if isinstance(part, str):
+                                    text = str(part).strip()
+                                    if text:
+                                        text = " ".join(text.split())
+                                        if text:
+                                            runs.append({"text": text, "bold": False, "italic": False})
+                                else:
+                                    # Extract runs from tag without moving it
+                                    part_runs = extract_runs(part)
+                                    runs.extend(part_runs)
                             
-                            runs = extract_runs(temp_container)
                             if runs:
                                 full_text = " ".join(r["text"] for r in runs)
                                 if full_text not in seen:
@@ -316,11 +334,18 @@ def parse_lines(html: str, page_url: str = "", include_images: bool = False) -> 
                 
                 # Process remaining part after last <br>
                 if current_part:
-                    temp_container = BeautifulSoup("", "lxml").new_tag("span")
-                    for item in current_part:
-                        temp_container.append(item)
+                    runs = []
+                    for part in current_part:
+                        if isinstance(part, str):
+                            text = str(part).strip()
+                            if text:
+                                text = " ".join(text.split())
+                                if text:
+                                    runs.append({"text": text, "bold": False, "italic": False})
+                        else:
+                            part_runs = extract_runs(part)
+                            runs.extend(part_runs)
                     
-                    runs = extract_runs(temp_container)
                     if runs:
                         full_text = " ".join(r["text"] for r in runs)
                         if full_text not in seen:
