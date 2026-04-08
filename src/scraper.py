@@ -1242,10 +1242,10 @@ def build_docx(
         _add_page_break(doc)
 
     # -------------------------------------------------------------------
-    # Replace placeholders if template was used
+    # Replace placeholders (XXX1, HHH1, FFF1) - do this unconditionally
+    # This works whether a template was loaded or not
     # -------------------------------------------------------------------
-    if language and cfg:
-        _replace_placeholders(doc, title, base_url)
+    _replace_placeholders(doc, title, base_url)
 
     # -------------------------------------------------------------------
     # Save (delete existing file first)
