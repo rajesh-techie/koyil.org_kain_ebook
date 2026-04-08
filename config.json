@@ -6,9 +6,10 @@
   ],
 
   "stop_markers": [
-    "ramanuja dasan",
-    "rAmAnuja dhAsan",
-    "rAmAnuja dAsan"
+    "SrIvaishNava education/kids portal"
+    // "ramanuja dasan",
+    // "rAmAnuja dhAsan",
+    // "rAmAnuja dAsan"
   ],
 
   "remove_text": [
@@ -19,7 +20,7 @@
 
   "toc_selector": "li > a[href]",
 
-  "max_chapters": 150,
+  "max_chapters": 250,
 
   "reading_mode": true,
 
