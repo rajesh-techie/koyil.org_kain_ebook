@@ -954,13 +954,18 @@ def _get_available_style(doc: Document, requested_style: str) -> str:
     return "Normal"
 
 
-def _write_lines(doc: Document, items: list[dict]):
+def _write_lines(doc: Document, items: list[dict], apply_font_size_14: bool = False):
     """Write structured items as DOCX paragraphs, preserving formatting (bold/italic).
-    Handles both text items and image items. URLs are formatted in blue."""
+    Handles both text items and image items. URLs are formatted in blue.
+    
+    Args:
+        apply_font_size_14: If True, sets font size to 14pt for all text (non-heading) content.
+    """
     import re
     
     url_pattern = re.compile(r'https?://[^\s]+|www\.[^\s]+')
     blue_color = RGBColor(0, 51, 204)  # Same blue as header/footer
+    font_size = Pt(14) if apply_font_size_14 else None
     
     for item in items:
         # Handle image items
@@ -1010,7 +1015,9 @@ def _write_lines(doc: Document, items: list[dict]):
             if text:
                 # Add space between runs if needed (unless at start or after space)
                 if i > 0 and not text.startswith(" ") and not runs[i-1].get("text", "").endswith(" "):
-                    p.add_run(" ")
+                    space_run = p.add_run(" ")
+                    if font_size:
+                        space_run.font.size = font_size
                 
                 # Prefix first run with bullet character if style fell back
                 if style_fell_back and first_run_in_para:
@@ -1025,6 +1032,8 @@ def _write_lines(doc: Document, items: list[dict]):
                         run = p.add_run(text[last_end:url_match.start()])
                         run.bold = bold
                         run.italic = italic
+                        if font_size:
+                            run.font.size = font_size
                     
                     # Add URL text in blue
                     url_text = url_match.group(0)
@@ -1032,6 +1041,8 @@ def _write_lines(doc: Document, items: list[dict]):
                     url_run.font.color.rgb = blue_color
                     url_run.bold = bold
                     url_run.italic = italic
+                    if font_size:
+                        url_run.font.size = font_size
                     
                     last_end = url_match.end()
                 
@@ -1040,11 +1051,15 @@ def _write_lines(doc: Document, items: list[dict]):
                     run = p.add_run(text[last_end:])
                     run.bold = bold
                     run.italic = italic
+                    if font_size:
+                        run.font.size = font_size
                 elif last_end == 0:
                     # No URLs found, add text normally
                     run = p.add_run(text)
                     run.bold = bold
                     run.italic = italic
+                    if font_size:
+                        run.font.size = font_size
 
 
 def _copy_template_content(doc: Document, template_path: str) -> None:
@@ -1334,6 +1349,9 @@ def build_docx(
         bm_name = bookmark_names[i]
         bm_id   = bm_id_counter
         bm_id_counter += 1
+        
+        # Apply font size 14 from chapter index 6+ (roughly page 10+)
+        apply_font_14 = i >= 6
 
         # Use Heading 1 for chapters (same level as Introduction) so TOC alignment is consistent
         # Add sequence number to chapter title for TOC numbering
@@ -1345,7 +1363,7 @@ def build_docx(
         _add_bookmark(hdg, bm_id, bm_name)
 
         if lines:
-            _write_lines(doc, lines)
+            _write_lines(doc, lines, apply_font_size_14=apply_font_14)
         elif not sub_chapters:
             doc.add_paragraph("[No content extracted for this chapter.]", style="Normal")
 
@@ -1362,7 +1380,7 @@ def build_docx(
             _add_bookmark(sub_hdg, bm_id_counter, sub_bm_name)
             bm_id_counter += 1
             if sub_lines:
-                _write_lines(doc, sub_lines)
+                _write_lines(doc, sub_lines, apply_font_size_14=apply_font_14)
             elif not sub_sub_chapters:
                 doc.add_paragraph("[No content extracted for this sub-chapter.]", style="Normal")
 
@@ -1378,7 +1396,7 @@ def build_docx(
                 _add_bookmark(subsub_hdg, bm_id_counter, subsub_bm_name)
                 bm_id_counter += 1
                 if subsub_lines:
-                    _write_lines(doc, subsub_lines)
+                    _write_lines(doc, subsub_lines, apply_font_size_14=apply_font_14)
                 else:
                     doc.add_paragraph("[No content extracted for this sub-sub-chapter.]", style="Normal")
 
