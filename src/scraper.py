@@ -133,6 +133,12 @@ def parse_args() -> argparse.Namespace:
         default="english",
         help="Language for template selection (english, tamil, hindi, telugu, malayalam, kannada). Default: english",
     )
+    parser.add_argument(
+        "--book-type",
+        default="main",
+        choices=["main", "other"],
+        help="Book type for template selection: 'main' for divyaprabhandam/coloring books, 'other' for other types. Default: main",
+    )
     return parser.parse_args()
 
 
@@ -1215,15 +1221,26 @@ def _replace_placeholders(doc: Document, title: str, base_url: str) -> None:
 
 
 def _load_template_path(language: str, cfg: dict) -> str:
-    """Get the full path to the template file for the given language."""
+    """Get the full path to the template file for the given language based on book_type."""
     template_folder = cfg.get("template_folder", "")
-    templates = cfg.get("templates", {})
+    book_type = cfg.get("book_type", "main")
+    
+    # Select template set based on book_type
+    if book_type == "other":
+        templates = cfg.get("other_templates", {})
+    else:  # Default to "main"
+        templates = cfg.get("main_templates", {})
     
     lang_lower = language.lower()
     template_name = templates.get(lang_lower)
     
     if not template_name:
-        log.warning("Language '%s' not found in config. Available: %s", language, ", ".join(templates.keys()))
+        log.warning(
+            "Language '%s' not found in config for book_type '%s'. Available: %s",
+            language,
+            book_type,
+            ", ".join(templates.keys()),
+        )
         return ""
     
     full_path = str(Path(template_folder) / template_name)
@@ -1309,11 +1326,14 @@ def build_docx(
     # -------------------------------------------------------------------
     # Pages 3+ — One section per chapter, each heading carries a bookmark
     # -------------------------------------------------------------------
+    bm_id_counter = 1  # Global bookmark ID counter (must be unique across all bookmarks)
     for i, ch_data in enumerate(chapter_contents):
         ch_title = ch_data["title"]
         lines = ch_data["lines"]
+        sub_chapters = ch_data.get("sub_chapters", [])
         bm_name = bookmark_names[i]
-        bm_id   = i + 1  # IDs start at 1
+        bm_id   = bm_id_counter
+        bm_id_counter += 1
 
         # Use Heading 1 for chapters (same level as Introduction) so TOC alignment is consistent
         # Add sequence number to chapter title for TOC numbering
@@ -1326,8 +1346,41 @@ def build_docx(
 
         if lines:
             _write_lines(doc, lines)
-        else:
+        elif not sub_chapters:
             doc.add_paragraph("[No content extracted for this chapter.]", style="Normal")
+
+        # Write sub-chapters (Level 2) as Heading 2 entries
+        for j, sub in enumerate(sub_chapters, 1):
+            sub_title = sub["title"]
+            sub_lines = sub.get("lines", [])
+            sub_sub_chapters = sub.get("sub_sub_chapters", [])
+            sub_numbered = f"{i + 1}.{j} {sub_title}"
+            sub_bm_name = _make_bookmark_name(bm_id_counter, sub_title)
+            sub_hdg = doc.add_heading(sub_numbered, level=2)
+            for run in sub_hdg.runs:
+                run.font.color.rgb = RGBColor(0, 51, 204)
+            _add_bookmark(sub_hdg, bm_id_counter, sub_bm_name)
+            bm_id_counter += 1
+            if sub_lines:
+                _write_lines(doc, sub_lines)
+            elif not sub_sub_chapters:
+                doc.add_paragraph("[No content extracted for this sub-chapter.]", style="Normal")
+
+            # Write sub-sub-chapters (Level 3) as Heading 3 entries
+            for k, subsub in enumerate(sub_sub_chapters, 1):
+                subsub_title = subsub["title"]
+                subsub_lines = subsub.get("lines", [])
+                subsub_numbered = f"{i + 1}.{j}.{k} {subsub_title}"
+                subsub_bm_name = _make_bookmark_name(bm_id_counter, subsub_title)
+                subsub_hdg = doc.add_heading(subsub_numbered, level=3)
+                for run in subsub_hdg.runs:
+                    run.font.color.rgb = RGBColor(0, 51, 204)
+                _add_bookmark(subsub_hdg, bm_id_counter, subsub_bm_name)
+                bm_id_counter += 1
+                if subsub_lines:
+                    _write_lines(doc, subsub_lines)
+                else:
+                    doc.add_paragraph("[No content extracted for this sub-sub-chapter.]", style="Normal")
 
         _add_page_break(doc)
 
@@ -1368,11 +1421,16 @@ def main():
     output_path = validate_output_path(args.output)
     title = args.title
     language = args.language
+    book_type = args.book_type
+
+    # Override config book_type with CLI argument if provided
+    cfg["book_type"] = book_type
 
     log.info("Input URL   : %s", url)
     log.info("Output file : %s", output_path)
     log.info("Document title: %s", title)
     log.info("Template language: %s", language)
+    log.info("Book type: %s", book_type)
 
     # Clean up old DOCX files in the working directory
     from pathlib import Path
@@ -1412,20 +1470,81 @@ def main():
         else:
             log.warning("No chapter links detected on main page.")
 
-        # Task 4.4 — scrape each chapter page
-        chapter_contents = []   # list of {"title": str, "lines": list[dict]}
+        # Task 4.4 — scrape each chapter page (Level 1) and optionally sub-pages (Level 2/3)
+        max_depth = cfg.get("max_depth", 1)
+        chapter_contents = []   # list of {"title": str, "lines": list[dict], "sub_chapters": list[dict]}
         for idx, ch in enumerate(chapters, 1):
             log.info("Scraping chapter %d/%d: %s", idx, len(chapters), ch["title"])
             try:
                 page.goto(ch["url"], wait_until="networkidle")
             except PlaywrightTimeout:
                 log.warning("Timeout on chapter page: %s — skipping.", ch["url"])
-                chapter_contents.append({"title": ch["title"], "lines": []})
+                chapter_contents.append({"title": ch["title"], "lines": [], "sub_chapters": []})
                 continue
 
+            ch_html = get_page_html(page)
             ch_items = scrape_page(page, cfg, ch["url"])
             log.info("  -> %d items extracted.", len(ch_items))
-            chapter_contents.append({"title": ch["title"], "lines": ch_items})
+
+            sub_chapters = []
+            if max_depth >= 2:
+                # Use slug-only prefix matching so sub-pages published in
+                # a different month (different date path) are still found.
+                ch_slug = ch["url"].rstrip("/").split("/")[-1].lower()
+                raw_subs = detect_chapters(ch_html, ch["url"], toc_selector, max_chapters)
+                for sub in raw_subs:
+                    sub_slug = sub["url"].rstrip("/").split("/")[-1].lower()
+                    if sub_slug.startswith(ch_slug + "-"):
+                        sub_chapters.append(sub)
+                    else:
+                        log.debug("Skipping non-child sub-link: %s", sub["url"])
+                if sub_chapters:
+                    log.info("  -> %d sub-chapter(s) detected.", len(sub_chapters))
+                    for s_idx, sub in enumerate(sub_chapters, 1):
+                        log.info("  Scraping sub-chapter %d/%d: %s", s_idx, len(sub_chapters), sub["title"])
+                        try:
+                            page.goto(sub["url"], wait_until="networkidle")
+                        except PlaywrightTimeout:
+                            log.warning("  Timeout on sub-chapter: %s — skipping.", sub["url"])
+                            sub["lines"] = []
+                            sub["sub_sub_chapters"] = []
+                            continue
+                        sub_html = get_page_html(page)
+                        sub_items = scrape_page(page, cfg, sub["url"])
+                        log.info("    -> %d items extracted.", len(sub_items))
+                        sub["lines"] = sub_items
+
+                        # Level 3 — scrape sub-sub-chapters
+                        sub_sub_chapters = []
+                        if max_depth >= 3:
+                            sub_slug_val = sub["url"].rstrip("/").split("/")[-1].lower()
+                            raw_subsubs = detect_chapters(sub_html, sub["url"], toc_selector, max_chapters)
+                            for subsub in raw_subsubs:
+                                subsub_slug = subsub["url"].rstrip("/").split("/")[-1].lower()
+                                if subsub_slug.startswith(sub_slug_val + "-"):
+                                    sub_sub_chapters.append(subsub)
+                                else:
+                                    log.debug("Skipping non-child L3 link: %s", subsub["url"])
+                            if sub_sub_chapters:
+                                log.info("    -> %d sub-sub-chapter(s) detected.", len(sub_sub_chapters))
+                                for ss_idx, subsub in enumerate(sub_sub_chapters, 1):
+                                    log.info("    Scraping sub-sub-chapter %d/%d: %s", ss_idx, len(sub_sub_chapters), subsub["title"])
+                                    try:
+                                        page.goto(subsub["url"], wait_until="networkidle")
+                                    except PlaywrightTimeout:
+                                        log.warning("    Timeout on sub-sub-chapter: %s — skipping.", subsub["url"])
+                                        subsub["lines"] = []
+                                        continue
+                                    subsub_items = scrape_page(page, cfg, subsub["url"])
+                                    log.info("      -> %d items extracted.", len(subsub_items))
+                                    subsub["lines"] = subsub_items
+                            else:
+                                log.debug("    -> No sub-sub-chapters found within sub-chapter URL prefix.")
+                        sub["sub_sub_chapters"] = sub_sub_chapters
+                else:
+                    log.info("  -> No sub-chapters found within chapter URL prefix.")
+
+            chapter_contents.append({"title": ch["title"], "lines": ch_items, "sub_chapters": sub_chapters})
 
         # Task 5 — build and save the DOCX
         log.info("Building DOCX document ...")

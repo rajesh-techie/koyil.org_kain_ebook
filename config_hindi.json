@@ -2,15 +2,16 @@
   "_comment": "Scraper configuration. Add/remove keywords freely without changing code.",
 
   "start_markers": [
-    "SatakOpAya nama:"
+    "रामानुजाय"
   ],
 
-    "start_markers_commented": [
+    "_start_markers_commented": [
+          "महामुनये नमः",
     "varavaramunayE nama:"
   ],
 
   "stop_markers": [
-    "SrIvaishNava education/kids portal"
+    "का पोर्टल"
   ],
   
   "_stop_markers_commented": [
@@ -22,16 +23,18 @@
   "remove_text": [
     "Full Series",
     "Previous",
-    "<< Previous",
     "SrI: SrImathE SatakOpAya nama: SrImathE rAmAnujAya nama: SrImath varavaramunayE nama:",
-    "SrI: SrImathE SatakOpAya nama: SrImathE rAmAnujAya nama: SrImadh varavara munayE nama:"
+    "परिचय",
+    "पूरी श्रृंखला",
+    "श्रीः श्रीमतेशठकोपाय नमः श्रीमतेरामानुजाय नमः श्रीमद्वरवरमुनये नमः",
+    "श्रीः श्रीमते शठकोपाय नमः श्रीमते रामानुजाय नमः श्रीमद्वरवरमुनये नमः श्रीवानाचल महामुनये नमः",
+    "श्रीः श्रीमते शठकोपाय नमः श्रीमते रामानुजाय नमः श्रीमद् वरवरमुनये नमः"
+
   ],
 
   "toc_selector": "li > a[href]",
 
   "max_chapters": 150,
-
-  "max_depth": 3,
 
   "reading_mode": true,
 

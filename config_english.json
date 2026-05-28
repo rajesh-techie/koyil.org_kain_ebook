@@ -2,10 +2,6 @@
   "_comment": "Scraper configuration. Add/remove keywords freely without changing code.",
 
   "start_markers": [
-    "SatakOpAya nama:"
-  ],
-
-    "start_markers_commented": [
     "varavaramunayE nama:"
   ],
 
@@ -22,16 +18,12 @@
   "remove_text": [
     "Full Series",
     "Previous",
-    "<< Previous",
-    "SrI: SrImathE SatakOpAya nama: SrImathE rAmAnujAya nama: SrImath varavaramunayE nama:",
-    "SrI: SrImathE SatakOpAya nama: SrImathE rAmAnujAya nama: SrImadh varavara munayE nama:"
+    "SrI: SrImathE SatakOpAya nama: SrImathE rAmAnujAya nama: SrImath varavaramunayE nama:"
   ],
 
   "toc_selector": "li > a[href]",
 
   "max_chapters": 150,
-
-  "max_depth": 3,
 
   "reading_mode": true,
 
