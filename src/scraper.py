@@ -463,8 +463,8 @@ def extract_content(items: list[dict], start_markers: list[str], stop_markers: l
         if i == start_idx:
             continue  # never match stop on the very first item
         if _line_matches_any(text, stop_markers):
-            stop_idx = i + 1  # Slice is exclusive, so this includes the marker itself
-            log.info("Stop marker found at item %d: %r  — including it",
+            stop_idx = i  # Exclude the stop marker line itself
+            log.info("Stop marker found at item %d: %r  — excluding it",
                      i, text[:80])
             break
 
@@ -1002,6 +1002,19 @@ def _write_lines(doc: Document, items: list[dict], apply_font_size_14: bool = Fa
         style_fell_back = is_bullet_style and not style.startswith("List Bullet")
         
         p = doc.add_paragraph(style=style)
+        
+        # If font_size is set, override paragraph-level font size via XML to
+        # ensure it takes precedence over any template style definition
+        if font_size:
+            pPr = p._p.get_or_add_pPr()
+            rPr = OxmlElement('w:rPr')
+            sz = OxmlElement('w:sz')
+            sz.set(qn('w:val'), str(int(font_size.pt * 2)))  # half-points
+            szCs = OxmlElement('w:szCs')
+            szCs.set(qn('w:val'), str(int(font_size.pt * 2)))
+            rPr.append(sz)
+            rPr.append(szCs)
+            pPr.append(rPr)
         
         # If style fell back from bullet to Normal, add indent + bullet char manually
         if style_fell_back:
