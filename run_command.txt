@@ -1,0 +1,46 @@
+-- english
+Hi there, 
+
+DO NOT change any file without my approvals.
+
+can u execute the below command 
+
+python src\scraper.py --url "https://divyaprabandham.koyil.org/index.php/2025/06/periyazhwar-thirumozhi" --output "D:\koyil.org\kaink1_tiruvirutham_ebook\periyazhwar-thirumozhi_12.docx" --title "periyazhwar-thirumozhi" --language english
+python src\scraper.py --url "https://divyaprabandham.koyil.org/index.php/2020/11/periya-thirumozhi/" --output "D:\koyil.org\kaink1_tiruvirutham_ebook\periya-thirumozhi_17.docx" --title "periya-thirumozhi" --language english
+
+python src\scraper.py --url "https://divyaprabandham.koyil.org/index.php/2017/05/thirunedunthandakam/" --output "D:\koyil.org\kaink1_tiruvirutham_ebook\thirunedunthandakam.docx" --title "thirunedunthandakam" --language english
+
+python src\scraper.py --url "https://divyaprabandham.koyil.org/index.php/2023/09/thiruchchandha-viruththam/" --output "D:\koyil.org\kaink1_tiruvirutham_ebook\thiruchchandha-viruththam.docx" --title "thiruchchandha-viruththam" --language english
+
+python src\scraper.py --url "https://divyaprabandham.koyil.org/index.php/2019/07/periya-thirumadal/" --output "D:\koyil.org\kaink1_tiruvirutham_ebook\periya-thirumadal.docx" --title "periya-thirumadal" --language english
+
+
+
+
+
+-- Hindi 
+python src\scraper.py --url "https://divyaprabandham.koyil.org/index.php/simple-guide-to-dhivyaprabandham-hindi/" --output "D:\koyil.org\kaink1_tiruvirutham_ebook\simple-guide-to-dhivyaprabandham-hindi.docx" --title "दिव्य प्रबंध – सरल मार्गदर्शिका" --language hindi
+
+----------------28-may-2026---------------------------
+
+# Use main templates (default)
+python scraper.py --url "https://..." --output "output.docx" --title "Title" --language "english" --book-type "main"
+
+# Use other templates
+python scraper.py --url "https://..." --output "output.docx" --title "Title" --language "english" --book-type "other"
+
+# If not specified, defaults to "main"
+python scraper.py --url "https://..." --output "output.docx" --title "Title" --language "english"
+
+----------------28-may-2026---------------------------
+
+python src\scraper.py --config "D:\koyil.org\kaink1_tiruvirutham_ebook\config_english.json" --url "https://divyaprabandham.koyil.org/index.php/2019/07/periya-thirumadal/" --output "D:\koyil.org\kaink1_tiruvirutham_ebook\periya-thirumadal.docx" --title "periya-thirumadal" --language english --book-type "main"
+
+things to do after generation
+1) update toc
+2) change footer and header format
+
+things which Sakshi amma/other kainkarya parars  has to do
+1) fill first page
+2) add the links in preface and last page 
+3) size layut
