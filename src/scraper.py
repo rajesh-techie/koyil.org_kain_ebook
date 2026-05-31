@@ -39,17 +39,18 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Config loader
 # ---------------------------------------------------------------------------
-CONFIG_PATH = Path(__file__).parent.parent / "config.json"
+DEFAULT_CONFIG_PATH = Path(__file__).parent.parent / "config.json"
 
 
-def load_config() -> dict:
-    """Load configuration from config.json next to this script."""
-    if not CONFIG_PATH.exists():
-        log.error("config.json not found at: %s", CONFIG_PATH)
+def load_config(config_path: Path = None) -> dict:
+    """Load configuration from the given path, or config.json by default."""
+    path = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
+    if not path.exists():
+        log.error("Config file not found at: %s", path)
         sys.exit(1)
-    with CONFIG_PATH.open("r", encoding="utf-8") as f:
+    with path.open("r", encoding="utf-8") as f:
         cfg = json.load(f)
-    log.info("Config loaded from %s", CONFIG_PATH)
+    log.info("Config loaded from %s", path)
     return cfg
 
 
@@ -138,6 +139,11 @@ def parse_args() -> argparse.Namespace:
         default="main",
         choices=["main", "other"],
         help="Book type for template selection: 'main' for divyaprabhandam/coloring books, 'other' for other types. Default: main",
+    )
+    parser.add_argument(
+        "--config",
+        default=None,
+        help="Path to config JSON file. Defaults to config.json in the project root.",
     )
     return parser.parse_args()
 
@@ -1445,7 +1451,7 @@ def build_docx(
 # ---------------------------------------------------------------------------
 def main():
     args = parse_args()
-    cfg = load_config()
+    cfg = load_config(args.config)
 
     # Validate inputs before doing anything expensive
     url = validate_url(args.url)
